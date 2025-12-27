@@ -187,32 +187,46 @@ values+="$exif_clarity\n"
 labels+="Noise Reduction:"
 values+="$exif_noise_reduction"
 
-caption_block=(
-	"(" -size "${column_width}x" -gravity East caption:"$labels" ")"
-	"(" -size "${column_gap}x%[fx:h]" xc:none ")"
-	"(" -size "${column_width}x" -gravity West caption:"$values" ")"
-)
-
 magick "$file_path" \
 	-auto-orient \
 	-resize "${image_width}x" \
 	-blur 0x7 \
+	-write mpr:BACKGROUND \
+	+delete \
 	\
 	\( -background none \
 	${font_family:+-font "$font_family"} \
 	-pointsize "$font_size" \
 	-interline-spacing 0 \
-	-stroke black \
 	-fill white \
 	\
-	"${caption_block[@]}" \
+	\( -size "${column_width}x" -gravity East caption:"$labels" \) \
+	\( -size "${column_gap}x%[fx:h]" xc:none \) \
+	\( -size "${column_width}x" -gravity West caption:"$values" \) \
 	\
 	+append \
 	-gravity Center \
+	-write mpr:FOREGROUND \
+	+delete \
 	\) \
 	\
+	mpr:FOREGROUND \
+	-fill "#00000080" \
+	-colorize 100 \
+	-blur 0x9 \
+	-write mpr:SHADOW \
+	+delete \
+	\
+	mpr:BACKGROUND \
+	\
+	mpr:SHADOW \
 	-gravity Center \
 	-compose Over -composite \
+	\
+	mpr:FOREGROUND \
+	-gravity Center \
+	-compose Over -composite \
+	\
 	"$file_output"
 
 echo "Created $file_output"
