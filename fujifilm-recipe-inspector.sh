@@ -24,36 +24,50 @@ ansi_reset='\e[0m'
 box_width=60
 box_label_width=25
 
-all_data=$(
-	exiftool -s \
-		-Make \
-		-Model \
-		-LensModel \
-		\
-		-FNumber \
-		-ExposureTime \
-		-ISO \
-		-ExposureCompensation \
-		-MeteringMode \
-		-FocalLength \
-		\
+while IFS=: read -r key value; do
+	value="${value#"${value%%[![:space:]]*}"}"
+	case "$key" in
+	Make) exif_make="$value" ;;
+	Model) exif_model="$value" ;;
+	LensModel) exif_lens_model="$value" ;;
+	FNumber) exif_f_number="$value" ;;
+	ExposureTime) exif_exposure_time="$value" ;;
+	ISO) exif_iso="$value" ;;
+	ExposureCompensation) exif_exposure_compensation="$value" ;;
+	MeteringMode) exif_metering_mode="$value" ;;
+	FocalLength) exif_focal_length="$value" ;;
+	FilmMode) exif_film_mode="$value" ;;
+	HighlightTone) exif_highlight_tone="$value" ;;
+	ShadowTone) exif_shadow_tone="$value" ;;
+	WhiteBalance) exif_white_balance="$value" ;;
+	WhiteBalanceFineTune) exif_white_balance_fine_tune="$value" ;;
+	Saturation) exif_saturation="$value" ;;
+	Sharpness) exif_sharpness="$value" ;;
+	NoiseReduction) exif_noise_reduction="$value" ;;
+	DynamicRangeSetting) exif_dynamic_range_setting="$value" ;;
+	DevelopmentDynamicRange) exif_development_dynamic_range="$value" ;;
+	GrainEffectRoughness) exif_grain_effect_roughness="$value" ;;
+	GrainEffectSize) exif_grain_effect_size="$value" ;;
+	ColorChromeEffect) exif_color_chrome_effect="$value" ;;
+	ColorChromeFXBlue) exif_color_chrome_fx_blue="$value" ;;
+	Clarity) exif_clarity="$value" ;;
+	ColorTemperature) exif_color_temperature="$value" ;;
+	esac
+done <<EOF
+$(
+	exiftool -S \
+		-Make -Model -LensModel \
+		-FNumber -ExposureTime -ISO -ExposureCompensation -MeteringMode -FocalLength \
 		-FilmMode -HighlightTone -ShadowTone -WhiteBalance -WhiteBalanceFineTune -Saturation \
 		-Sharpness -NoiseReduction -DynamicRangeSetting -DevelopmentDynamicRange -GrainEffectRoughness -GrainEffectSize \
 		-ColorChromeEffect -ColorChromeFXBlue -Clarity -ColorTemperature \
 		"$file_path" |
 		sed -E "s/\(((very|medium) )?(((soft|high|hard|weak)(est)?)|normal)\)//g"
 )
-get_value() {
-	echo "$all_data" |
-		grep -m 1 "^$1" |
-		cut -d ':' -f 2- |
-		xargs
-}
+EOF
 
 get_film_sim() {
-	local film_sim
-	film_sim="$(get_value "FilmMode")"
-	test -z "$film_sim" && film_sim=$(get_value "Saturation")
+	local film_sim="${exif_film_mode:-$exif_saturation}"
 
 	case "$film_sim" in
 	"F0/Standard (Provia)" | "F1/Studio Portrait" | "F1c/Studio Portrait Increased Sharpness")
@@ -87,36 +101,34 @@ get_film_sim() {
 }
 
 format_wb_fine_tune_scaled() {
-	get_value "WhiteBalanceFineTune" | awk '{printf "Red %+d, Blue %+d", $2/20, $4/20}'
+	local red blue
+	red="${exif_white_balance_fine_tune#* }"
+	red="${red%%,*}"
+	blue="${exif_white_balance_fine_tune##*, Blue }"
+	printf "%+d Red, %+d Blue" $((red / 20)) $((blue / 20))
 }
 
 get_white_balance() {
-	local wb
-	wb="$(get_value "WhiteBalance")"
-	if [[ $wb == "Kelvin" ]]; then
-		echo "$(get_value "ColorTemperature")K"
+	if [[ $exif_white_balance == "Kelvin" ]]; then
+		echo "${exif_color_temperature}K"
 	else
-		echo "$wb"
+		echo "$exif_white_balance"
 	fi
 }
 
 get_dynamic_range() {
-	local dr_type
-	dr_type="$(get_value "DynamicRangeSetting")"
-	if [[ $dr_type == "Manual" ]]; then
-		echo "DR$(get_value "DevelopmentDynamicRange")"
+	if [[ $exif_dynamic_range_setting == "Manual" ]]; then
+		echo "DR$exif_development_dynamic_range"
 	else
-		echo "$dr_type"
+		echo "$exif_dynamic_range_setting"
 	fi
 }
 
 get_grain_effect() {
-	local grain_effect
-	grain_effect="$(get_value "GrainEffectRoughness")"
-	if [[ $grain_effect == "Off" ]]; then
+	if [[ $exif_grain_effect_roughness == "Off" ]]; then
 		echo "Off"
 	else
-		echo "$grain_effect, $(get_value "GrainEffectSize")"
+		echo "$exif_grain_effect_roughness, $exif_grain_effect_size"
 	fi
 }
 
@@ -127,7 +139,7 @@ print_heading_line() {
 	local remaining_width=$((box_width - used_width))
 	local border_segment
 	border_segment=$(printf "%*s" $remaining_width)
-	printf "╔${ansi_invert}%s %s %s${ansi_reset}╗\n" "$heading" "$border_segment" "$file_name"
+	printf "\n╔${ansi_invert}%s %s %s${ansi_reset}╗\n" "$heading" "$border_segment" "$file_name"
 }
 print_section_divider() {
 	local fill_width=$((box_width - 2))
@@ -166,47 +178,35 @@ print_end_line() {
 	printf "╚%s╝\n" "$(printf "%*s" $fill_width | tr ' ' '═')"
 }
 
-camera_make=$(get_value "Make")
-camera_model_full=$(get_value "Model")
-camera_model_short=$(echo "$camera_model_full" | sed "s/$camera_make//i" | xargs)
-
-color="$(get_value "Saturation")"
-
-is_bw=false
-if [[ $color =~ .*(Acros|B\&W).* ]]; then
-	is_bw=true
-fi
-
-printf "\n"
 print_heading_line "Fujifilm Recipe Card" "$file_name"
 print_data_line "" ""
 print_section_heading_line "Camera Gear"
-print_data_line "Manufacturer" "$camera_make"
-print_data_line "Camera Model" "$camera_model_short"
-print_data_line "Lens" "$(get_value "LensModel")"
+print_data_line "Manufacturer" "$exif_make"
+print_data_line "Camera Model" "${exif_model//$exif_make/}"
+print_data_line "Lens" "$exif_lens_model"
 print_section_divider
 print_section_heading_line "Camera settings"
-print_data_line "Focal Length" "$(get_value "FocalLength")"
-print_data_line "F Number" "$(get_value "FNumber")"
-print_data_line "Shutter Speed" "$(get_value "ExposureTime")"
-print_data_line "ISO" "$(get_value "ISO")"
-print_data_line "Exposure Comp." "$(get_value "ExposureCompensation")"
-print_data_line "Metering Mode" "$(get_value "MeteringMode")"
+print_data_line "Focal Length" "$exif_focal_length"
+print_data_line "F Number" "$exif_f_number"
+print_data_line "Shutter Speed" "$exif_exposure_time"
+print_data_line "ISO" "$exif_iso"
+print_data_line "Exposure Comp." "$exif_exposure_compensation"
+print_data_line "Metering Mode" "$exif_metering_mode"
 print_section_divider
 print_section_heading_line "Recipe"
 print_data_line "Film Simulation" "$(get_film_sim)"
 print_data_line "White Balance" "$(get_white_balance)"
 print_data_line "WB Shift" "$(format_wb_fine_tune_scaled)"
-if ! $is_bw; then
-	print_data_line "Color" "$color"
+if [[ ! $exif_saturation =~ .*(Acros|B\&W).* ]]; then
+	print_data_line "Color" "$exif_saturation"
 fi
-print_data_line "Highlight" "$(get_value "HighlightTone")"
-print_data_line "Shadow" "$(get_value "ShadowTone")"
+print_data_line "Highlight" "$exif_highlight_tone"
+print_data_line "Shadow" "$exif_shadow_tone"
 print_data_line "Dynamic Range" "$(get_dynamic_range)"
 print_data_line "Grain Effect" "$(get_grain_effect)"
-print_data_line "Color Chrome Effect" "$(get_value "ColorChromeEffect")"
-print_data_line "Color Chrome FX Blue" "$(get_value "ColorChromeFXBlue")"
-print_data_line "Sharpness" "$(get_value "Sharpness")"
-print_data_line "Clarity" "$(get_value "Clarity")"
-print_data_line "Noise Reduction" "$(get_value "NoiseReduction")"
+print_data_line "Color Chrome Effect" "$exif_color_chrome_effect"
+print_data_line "Color Chrome FX Blue" "$exif_color_chrome_fx_blue"
+print_data_line "Sharpness" "$exif_sharpness"
+print_data_line "Clarity" "$exif_clarity"
+print_data_line "Noise Reduction" "$exif_noise_reduction"
 print_end_line
