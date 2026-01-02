@@ -12,12 +12,13 @@
   - [Dependencies](#dependencies)
     - [macOS (Homebrew)](#macos-homebrew)
     - [Linux (Debian/Ubuntu)](#linux-debianubuntu)
-  - [Installation & Setup](#installation-setup)
+  - [Installation & Setup](#installation-%26-setup)
     - [Global Access (Symlinking)](#global-access-symlinking)
   - [Usage](#usage)
   <!--toc:end-->
 
-Two Bash scripts for extracting and inspecting Fujifilm film simulation recipe data from `.RAF` and `.JPG` files.
+Two Bash scripts for extracting and inspecting Fujifilm film simulation recipe
+data from `.RAF` and `.JPG` files.
 
 > [!WARNING]
 > These scripts have currently only been tested with images from a Fujifilm X-M5.
@@ -26,13 +27,15 @@ Two Bash scripts for extracting and inspecting Fujifilm film simulation recipe d
 
 ### `fujifilm-recipe-card.sh`
 
-Extracts recipe parameters and generates a new JPEG with the settings overlaid on the original image.
+Extracts recipe parameters and generates a new JPEG with the settings overlaid
+on the original image.
 
 **Output:** `<filename>-recipe.jpg` (1080px wide, blurred background, text overlay).
 
 ### `fujifilm-recipe-inspector.sh`
 
-Reads EXIF data and outputs a formatted ASCII table of the recipe settings directly in the terminal.
+Reads EXIF data and outputs a formatted ASCII table of the recipe settings
+directly in the terminal.
 
 ## Dependencies
 
@@ -64,7 +67,8 @@ chmod +x fujifilm-recipe-card.sh fujifilm-recipe-inspector.sh
 
 ### Global Access (Symlinking)
 
-To run these scripts from any directory, create symbolic links to a directory in your `$PATH` (e.g., `/usr/local/bin` or `~/.local/bin`).
+To run these scripts from any directory, create symbolic links to a directory in
+your `$PATH` (e.g., `/usr/local/bin` or `~/.local/bin`).
 
 ```bash
 # Example: Link to /usr/local/bin (requires sudo)

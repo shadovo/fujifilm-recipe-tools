@@ -16,26 +16,118 @@ if [ -z "$1" ]; then
 	exit 1
 fi
 
-cleanup_and_exit() {
-	echo ""
-	echo "Script cancelled by user. Exiting immediately."
+ASCII_GREEN='\033[0;32m'
+ASCII_GRAY='\033[2;37m'
+ASCII_RED='\033[0;31m'
+ASCII_ORANGE='\033[0;33m'
+ASCII_RESET='\033[0m'
+
+TOTAL_FILES_IN_GLOB=$#
+total_created=0
+total_skipped=0
+total_failed=0
+
+clear_status_line() {
+	echo -ne "\r$(tput el)"
+}
+
+print_persisted_status() {
+	local status=$1
+	local file=$2
+	local msg=$3
+	clear_status_line
+	case "$status" in
+	"CREATED")
+		echo -e "${ASCII_GREEN}[CREATED]${ASCII_RESET}\t$file\t$msg"
+		;;
+	"WARNING")
+		echo -e "${ASCII_ORANGE}[WARNING]${ASCII_RESET}\t$file\t$msg"
+		;;
+	"ERROR")
+		echo -e "${ASCII_RED}[ERROR]${ASCII_RESET}\t$file\t$msg"
+		;;
+	"SKIPPED")
+		echo -e "${ASCII_GRAY}[SKIPPED]\t$file\t$msg${ASCII_RESET}"
+		;;
+	"*")
+		echo -e "[$status]\t$file\t$msg\n"
+		;;
+	esac
+}
+
+SPINNER_PARTS=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+spinner_pid=
+
+spinner_run() {
+	local i=0
+	local parent_pid=$$
+	while kill -0 "$parent_pid" 2>/dev/null; do
+		i=$(((i + 1) % ${#SPINNER_PARTS[@]}))
+		local spinner_char="${SPINNER_PARTS[$i]}"
+		echo -ne "\r$spinner_char"
+		sleep 0.1
+	done
+}
+
+hide_cursor() {
+	echo -ne "\033[?25l"
+}
+
+show_cursor() {
+	echo -ne "\033[?25h"
+}
+
+display_status() {
+	local status_msg="$1"
+	local file_path="$2"
+	local total_processed=$((total_created + total_skipped + total_failed))
+	local progress="$total_processed/$TOTAL_FILES_IN_GLOB"
+	echo -ne "\r$(tput el)⠿ [$progress] $status_msg: $file_path"
+	sleep 0.01
+}
+
+print_summary() {
+	local msg=$1
+	local total_processed=$((total_created + total_skipped + total_failed))
+	echo -e ""
+	echo -e "$msg"
+	echo -e "Files Processed: $total_processed of $TOTAL_FILES_IN_GLOB"
+	echo -e "${ASCII_GREEN}[CREATED]: $total_created${ASCII_RESET}"
+	if ((total_skipped != 0)); then
+		echo -e "${ASCII_GRAY}[SKIPPED]: $total_skipped${ASCII_RESET}"
+	fi
+	if ((total_failed != 0)); then
+		echo -e "${ASCII_RED}[FAILED]: $total_failed${ASCII_RESET}"
+	fi
+}
+
+cleanup() {
+	[[ -n "$spinner_pid" ]] && kill "$spinner_pid" &>/dev/null
+	clear_status_line
+	show_cursor
+}
+
+user_aborted() {
+	print_summary "${ASCII_ORANGE}Aborted by user${ASCII_RESET}"
 	exit 130
 }
 
-trap cleanup_and_exit SIGINT
+trap user_aborted SIGINT
+trap cleanup EXIT
+trap cleanup ERR
 
-image_width=1080
+IMAGE_WIDTH=1080
 
-column_gap=28
-column_width=$(((image_width - column_gap) / 2))
+COLUMN_GAP=28
+COLUMN_WIDTH=$(((IMAGE_WIDTH - COLUMN_GAP) / 2))
 
-font_size=32
+FONT_SIZE=32
 
-user_comment_value="Created by: @shadovo/fujifilm-recipe-tools"
+USER_COMMENT_VALUE="Created by: @shadovo/fujifilm-recipe-tools"
 
 has_font() {
 	local font_name="$1"
-	if identify -list font 2>/dev/null | grep -q "^[[:space:]]*Font:[[:space:]]*${font_name}$"; then
+	if magick -list font 2>/dev/null | grep -q "^[[:space:]]*Font:[[:space:]]*${font_name}$"; then
 		echo "$font_name"
 		return 0
 	else
@@ -147,7 +239,7 @@ create_recipe_image() {
 	file_dir=$(dirname "$file_path")
 	file_base=$(basename "$file_path")
 	file_name="${file_base%.*}"
-	file_output="${file_dir}/${file_name}-recipe.JPG"
+	file_output="${file_dir}/${file_name}-recipe.jpg"
 
 	while IFS=: read -r key value; do
 		value="${value#"${value%%[![:space:]]*}"}"
@@ -202,8 +294,9 @@ $(
 	)
 EOF
 
-	if [[ "$exif_user_comment" == *"$user_comment_value"* ]]; then
-		echo "   Skipping file '$file_path' because it is already a recipe image."
+	if [[ "$exif_user_comment" == *"$USER_COMMENT_VALUE"* ]]; then
+		((total_skipped++))
+		print_persisted_status "SKIPPED" "$file_path" "it is already a recipe image."
 		return 0
 	fi
 
@@ -260,22 +353,22 @@ EOF
 	labels+="Noise Reduction:"
 	values+="$exif_noise_reduction"
 
-	magick "$file_path" \
+	if ! magick "$file_path" \
 		-auto-orient \
-		-resize "${image_width}x" \
+		-resize "${IMAGE_WIDTH}x" \
 		-blur 0x7 \
 		-write mpr:BACKGROUND \
 		+delete \
 		\
 		\( -background none \
 		${font_family:+-font "$font_family"} \
-		-pointsize "$font_size" \
+		-pointsize "$FONT_SIZE" \
 		-interline-spacing 0 \
 		-fill white \
 		\
-		\( -size "${column_width}x" -gravity East caption:"$labels" \) \
-		\( -size "${column_gap}x%[fx:h]" xc:none \) \
-		\( -size "${column_width}x" -gravity West caption:"$values" \) \
+		\( -size "${COLUMN_WIDTH}x" -gravity East caption:"$labels" \) \
+		\( -size "${COLUMN_GAP}x%[fx:h]" xc:none \) \
+		\( -size "${COLUMN_WIDTH}x" -gravity West caption:"$values" \) \
 		\
 		+append \
 		-gravity Center \
@@ -300,28 +393,46 @@ EOF
 		-gravity Center \
 		-compose Over -composite \
 		\
-		"$file_output"
+		"$file_output"; then
 
-	if ! exiftool -UserComment="$user_comment_value" -overwrite_original "$file_output" &>/dev/null; then
-		echo "🔴 Error: Failed to write custom tag to output file: $file_output"
+		((total_failed++))
+		print_persisted_status "ERROR" "$file_output" "ImageMagick failed"
+		return 1
 	fi
 
-	echo "🟢 Created $file_output"
+	if exiftool -UserComment="$USER_COMMENT_VALUE" -overwrite_original "$file_output" &>/dev/null; then
+		((total_created++))
+		print_persisted_status "CREATED" "$file_output"
+	else
+		((total_failed++))
+		print_persisted_status "ERROR" "$file_output" "failed to write custom tag to output"
+	fi
 }
+
+echo ""
+hide_cursor
+spinner_run &
+spinner_pid=$!
 
 for file_path in "$@"; do
 
-	echo "🔵 Processing $file_path"
+	full_file_path="$PWD/$file_path"
 
-	if [ ! -f "$file_path" ]; then
-		echo "🟠 Warning: File '$file_path' not found or is not a regular file. Skipping."
+	display_status "Processing" "$full_file_path"
+
+	if [ ! -f "$full_file_path" ]; then
+		((total_skipped++))
+		print_persisted_status "WARNING" "$full_file_path" "not found or is not a regular file"
 		continue
 	fi
 
-	if [[ "$file_path" != *.jpg && "$file_path" != *.JPG ]]; then
-		echo "🟠 Warning: File '$file_path' is not a .jpg file. Skipping."
+	if [[ "$full_file_path" != *.jpg && "$full_file_path" != *.JPG ]]; then
+		((total_skipped++))
+		print_persisted_status "WARNING" "$full_file_path" "is not a .jpg/.JPG file"
 		continue
 	fi
 
-	create_recipe_image "$file_path"
+	create_recipe_image "$full_file_path"
 done
+
+print_summary "Finished"
