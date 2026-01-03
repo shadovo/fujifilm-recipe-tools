@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
 
+REQUIRED_EXIFTOOL_VERSION="10.50"
+REQUIRED_MAGICK_VERSION="7.0"
+
+validate_version() {
+	local required_version="$1"
+	local actual_version="$2"
+	if [[ "$(printf '%s\n' "$required_version" "$actual_version" | sort -V | head -n1)" != "$required_version" ]]; then
+		return 1
+	fi
+	return 0
+}
+
 if ! command -v exiftool &>/dev/null; then
-	echo "Error: exiftool could not be found. Please install it."
+	echo "Error: exiftool could not be found. Please install exiftool version $REQUIRED_EXIFTOOL_VERSION or later."
+	exit 1
+fi
+
+INSTALLED_EXIFTOOL_VERSION="$(exiftool -ver)"
+if ! validate_version "$REQUIRED_EXIFTOOL_VERSION" "$INSTALLED_EXIFTOOL_VERSION"; then
+	echo "Error: exiftool version $INSTALLED_EXIFTOOL_VERSION is too old. Please install version $REQUIRED_EXIFTOOL_VERSION or later."
 	exit 1
 fi
 
 if ! command -v magick &>/dev/null; then
-	echo "Error: magick could not be found. Please install imagemagick."
+	echo "Error: magick could not be found. Please install imagemagick version $REQUIRED_MAGICK_VERSION or later."
+	exit 1
+fi
+
+INSTALLED_MAGICK_VERSION="$(magick --version | head -n1 | awk '{print $3}' | cut -d'-' -f1)"
+if ! validate_version "$REQUIRED_MAGICK_VERSION" "$INSTALLED_MAGICK_VERSION"; then
+	echo "Error: ImageMagick version $INSTALLED_MAGICK_VERSION is too old. Please install version $REQUIRED_MAGICK_VERSION or later."
 	exit 1
 fi
 
