@@ -60,8 +60,7 @@ spinner_pid=
 
 spinner_run() {
 	local i=0
-	local parent_pid=$$
-	while kill -0 "$parent_pid" 2>/dev/null; do
+	while true; do
 		i=$(((i + 1) % ${#SPINNER_PARTS[@]}))
 		local spinner_char="${SPINNER_PARTS[$i]}"
 		echo -ne "\r$spinner_char"
@@ -416,7 +415,7 @@ spinner_pid=$!
 
 for file_path in "$@"; do
 
-	full_file_path="$PWD/$file_path"
+	full_file_path=$(printf '%q' "$PWD/$file_path")
 
 	display_status "Processing" "$full_file_path"
 
@@ -426,7 +425,7 @@ for file_path in "$@"; do
 		continue
 	fi
 
-	if [[ "$full_file_path" != *.jpg && "$full_file_path" != *.JPG ]]; then
+	if [[ "$(file -b --mime-type "$file_path")" != "image/jpeg" ]]; then
 		((total_skipped++))
 		print_persisted_status "WARNING" "$full_file_path" "is not a .jpg/.JPG file"
 		continue
